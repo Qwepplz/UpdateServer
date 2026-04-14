@@ -20,15 +20,15 @@ using System.Web.Script.Serialization;
 
 internal static class UpdateServerProgram
 {
-    private const string Owner = "Qwepplz";
-    private const string BackupOwner = "SaUrrr";
+    private const string GithubOwner = "Qwepplz";
+    private const string MirrorOwner = "SaUrrr";
     private const int RequestTimeoutMs = 15000;
     private const string LogDirectoryName = "log";
     private const string LogFilePrefix = "UpdateServer-";
     private const string LogFileDateFormat = "yyyy-MM-dd";
     private const string LogFileExtension = ".log";
-    private static readonly RepositoryTarget PugRepository = new RepositoryTarget("pug", Owner, "pug", "pug", BackupOwner, "pug");
-    private static readonly RepositoryTarget Get5Repository = new RepositoryTarget("get5", Owner, "get5", "get5", BackupOwner, "get5");
+    private static readonly RepositoryTarget PugRepository = new RepositoryTarget("pug", GithubOwner, "pug", "pug", MirrorOwner, "pug");
+    private static readonly RepositoryTarget Get5Repository = new RepositoryTarget("get5", GithubOwner, "get5", "get5", MirrorOwner, "get5");
     private static readonly RepositoryTarget[] AllRepositories = new[] { PugRepository, Get5Repository };
     private static readonly HashSet<string> AlwaysSkippedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -112,7 +112,7 @@ internal static class UpdateServerProgram
             Directory.CreateDirectory(tempRoot);
 
             Console.WriteLine();
-            Console.WriteLine(string.Format("=== {0}/{1} ({2}) ===", repository.Owner, repository.Repo, repository.DisplayName));
+            Console.WriteLine(string.Format("=== {0}/{1} ({2}) ===", repository.GithubOwner, repository.GithubRepo, repository.DisplayName));
             Console.WriteLine("[1/4] Reading repository tree...");
             string defaultBranch = GetDefaultBranch(repository);
             TreeResult treeResult = GetRemoteTree(repository, new[] { defaultBranch, "main", "master" });
@@ -244,12 +244,7 @@ internal static class UpdateServerProgram
                     }
 
                     string encodedPath = ConvertToUrlPath(relativePath);
-                    List<string> downloadUrls = new List<string>();
-                    if (repository.HasBackup)
-                    {
-                        downloadUrls.Add(string.Format("https://gitee.com/{0}/{1}/raw/{2}/{3}", repository.BackupOwner, repository.BackupRepo, treeResult.Branch, encodedPath));
-                    }
-                    downloadUrls.Add(string.Format("https://raw.githubusercontent.com/{0}/{1}/{2}/{3}", repository.Owner, repository.Repo, treeResult.Branch, encodedPath));
+                    List<string> downloadUrls = BuildRepositoryRawUrls(repository, treeResult.Branch, encodedPath);
 
                     progress.Update(
                         FormatProgressStatus("[3/4] Files", index + 1, sortedRemoteFiles.Count, string.Format("added: {0} updated: {1} unchanged: {2} | downloading", added, updated, unchanged)),
@@ -866,7 +861,7 @@ internal static class UpdateServerProgram
         };
 
         JavaScriptSerializer serializer = CreateSerializer();
-        string json = serializer.Serialize(state);
+        string json = FormatJsonForReadability(serializer.Serialize(state));
         File.WriteAllText(statePath, json, new UTF8Encoding(false));
     }
 
@@ -876,6 +871,138 @@ internal static class UpdateServerProgram
         serializer.MaxJsonLength = int.MaxValue;
         serializer.RecursionLimit = 256;
         return serializer;
+    }
+
+    private static string FormatJsonForReadability(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return json;
+        }
+
+        StringBuilder builder = new StringBuilder(json.Length + (json.Length / 4));
+        int indentLevel = 0;
+        bool inString = false;
+        bool escaping = false;
+        char previousNonWhitespace = '\0';
+
+        foreach (char character in json)
+        {
+            if (escaping)
+            {
+                builder.Append(character);
+                escaping = false;
+                continue;
+            }
+
+            if (inString)
+            {
+                builder.Append(character);
+                if (character == '\\')
+                {
+                    escaping = true;
+                }
+                else if (character == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            switch (character)
+            {
+                case '"':
+                    builder.Append(character);
+                    inString = true;
+                    break;
+
+                case '{':
+                case '[':
+                    builder.Append(character);
+                    builder.AppendLine();
+                    indentLevel++;
+                    AppendJsonIndentation(builder, indentLevel);
+                    break;
+
+                case '}':
+                case ']':
+                    indentLevel = Math.Max(0, indentLevel - 1);
+                    if (previousNonWhitespace != '{' && previousNonWhitespace != '[')
+                    {
+                        builder.AppendLine();
+                        AppendJsonIndentation(builder, indentLevel);
+                    }
+
+                    builder.Append(character);
+                    break;
+
+                case ',':
+                    builder.Append(character);
+                    builder.AppendLine();
+                    AppendJsonIndentation(builder, indentLevel);
+                    break;
+
+                case ':':
+                    builder.Append(": ");
+                    break;
+
+                default:
+                    if (!char.IsWhiteSpace(character))
+                    {
+                        builder.Append(character);
+                    }
+                    break;
+            }
+
+            if (!char.IsWhiteSpace(character))
+            {
+                previousNonWhitespace = character;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendJsonIndentation(StringBuilder builder, int indentLevel)
+    {
+        builder.Append(' ', indentLevel * 2);
+    }
+
+    private static List<string> BuildRepositoryInfoUrls(RepositoryTarget repository)
+    {
+        List<string> urls = new List<string>();
+        urls.Add(string.Format("https://api.github.com/repos/{0}/{1}", repository.GithubOwner, repository.GithubRepo));
+        if (repository.HasMirror)
+        {
+            urls.Add(string.Format("https://gitee.com/api/v5/repos/{0}/{1}", repository.MirrorOwner, repository.MirrorRepo));
+        }
+
+        return urls;
+    }
+
+    private static List<string> BuildRepositoryTreeUrls(RepositoryTarget repository, string encodedBranch)
+    {
+        List<string> urls = new List<string>();
+        urls.Add(string.Format("https://api.github.com/repos/{0}/{1}/git/trees/{2}?recursive=1", repository.GithubOwner, repository.GithubRepo, encodedBranch));
+        if (repository.HasMirror)
+        {
+            urls.Add(string.Format("https://gitee.com/api/v5/repos/{0}/{1}/git/trees/{2}?recursive=1", repository.MirrorOwner, repository.MirrorRepo, encodedBranch));
+        }
+
+        return urls;
+    }
+
+    private static List<string> BuildRepositoryRawUrls(RepositoryTarget repository, string branch, string encodedPath)
+    {
+        List<string> urls = new List<string>();
+        urls.Add(string.Format("https://raw.githubusercontent.com/{0}/{1}/{2}/{3}", repository.GithubOwner, repository.GithubRepo, branch, encodedPath));
+        if (repository.HasMirror)
+        {
+            urls.Add(string.Format("https://gitee.com/{0}/{1}/raw/{2}/{3}", repository.MirrorOwner, repository.MirrorRepo, branch, encodedPath));
+        }
+
+        return urls;
     }
 
     private static JsonResponse<T> RequestJsonFromUrls<T>(IEnumerable<string> urls)
@@ -901,12 +1028,7 @@ internal static class UpdateServerProgram
 
     private static string GetDefaultBranch(RepositoryTarget repository)
     {
-        List<string> urls = new List<string>();
-        if (repository.HasBackup)
-        {
-            urls.Add(string.Format("https://gitee.com/api/v5/repos/{0}/{1}", repository.BackupOwner, repository.BackupRepo));
-        }
-        urls.Add(string.Format("https://api.github.com/repos/{0}/{1}", repository.Owner, repository.Repo));
+        List<string> urls = BuildRepositoryInfoUrls(repository);
 
         try
         {
@@ -938,12 +1060,7 @@ internal static class UpdateServerProgram
 
             Console.WriteLine(string.Format("       Reading branch: {0}", branch));
             string encodedBranch = Uri.EscapeDataString(branch);
-            List<string> urls = new List<string>();
-            if (repository.HasBackup)
-            {
-                urls.Add(string.Format("https://gitee.com/api/v5/repos/{0}/{1}/git/trees/{2}?recursive=1", repository.BackupOwner, repository.BackupRepo, encodedBranch));
-            }
-            urls.Add(string.Format("https://api.github.com/repos/{0}/{1}/git/trees/{2}?recursive=1", repository.Owner, repository.Repo, encodedBranch));
+            List<string> urls = BuildRepositoryTreeUrls(repository, encodedBranch);
 
             try
             {
@@ -1351,27 +1468,27 @@ internal static class UpdateServerProgram
     private sealed class RepositoryTarget
     {
         public readonly string DisplayName;
-        public readonly string Owner;
-        public readonly string Repo;
+        public readonly string GithubOwner;
+        public readonly string GithubRepo;
         public readonly string StateKey;
-        public readonly string BackupOwner;
-        public readonly string BackupRepo;
+        public readonly string MirrorOwner;
+        public readonly string MirrorRepo;
 
-        public RepositoryTarget(string displayName, string owner, string repo, string stateKey, string backupOwner, string backupRepo)
+        public RepositoryTarget(string displayName, string githubOwner, string githubRepo, string stateKey, string mirrorOwner, string mirrorRepo)
         {
             DisplayName = displayName;
-            Owner = owner;
-            Repo = repo;
+            GithubOwner = githubOwner;
+            GithubRepo = githubRepo;
             StateKey = stateKey;
-            BackupOwner = backupOwner;
-            BackupRepo = backupRepo;
+            MirrorOwner = mirrorOwner;
+            MirrorRepo = mirrorRepo;
         }
 
-        public bool HasBackup
+        public bool HasMirror
         {
             get
             {
-                return !string.IsNullOrWhiteSpace(BackupOwner) && !string.IsNullOrWhiteSpace(BackupRepo);
+                return !string.IsNullOrWhiteSpace(MirrorOwner) && !string.IsNullOrWhiteSpace(MirrorRepo);
             }
         }
     }
