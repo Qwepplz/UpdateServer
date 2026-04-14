@@ -1,8 +1,6 @@
 # UpdateServer
 
-Version: `v1.0.0`
-
-`UpdateServer` is a Windows updater that syncs files from `Qwepplz/pug` and `Qwepplz/get5` into the folder that contains `UpdateServer.exe`. The target machine does not need Git; the updater reads repository metadata and file contents directly over HTTPS.
+`UpdateServer` 是一个 Windows 更新器，用于把 `Qwepplz/pug` 与 `Qwepplz/get5` 同步到 `UpdateServer.exe` 所在目录。程序直接通过 HTTPS 读取仓库元数据与文件内容，因此目标机器不需要安装 Git。
 
 ## Contents
 
@@ -13,16 +11,16 @@ Version: `v1.0.0`
 
 ## English Guide
 
-### Purpose
+### Overview
 
 | Item | Description |
 | --- | --- |
-| Goal | Sync `pug`, `get5`, or both into the folder where `UpdateServer.exe` is running. |
+| Goal | Sync `pug`, `get5`, or both into the folder that contains `UpdateServer.exe`. |
 | Platform | Windows. |
 | Git requirement | None on the target machine. |
-| Upstream repositories | `Qwepplz/pug` and `Qwepplz/get5`. |
-| Access order | Gitee mirrors first, matching GitHub repositories second. |
-| Order meaning | The two sources are treated as equivalent entrances for the same content; the order is only about network convenience, not content priority. |
+| Upstream content | `Qwepplz/pug` and `Qwepplz/get5`. |
+| Source policy | The updater can read from GitHub and Gitee mirror endpoints. They are treated as equivalent mirrors of the same content. Concrete access order is documented in `docs/maintenance.md`, not in this README. |
+| Safety model | The updater verifies downloaded files, confines writes to the target folder, and only deletes files that it previously tracked. |
 
 ### Quick Start
 
@@ -39,81 +37,31 @@ Version: `v1.0.0`
 
 | Key | Action |
 | --- | --- |
-| `1` / numpad `1` | Sync `Qwepplz/pug`. |
-| `2` / numpad `2` | Sync `Qwepplz/get5`. |
+| `1` / numpad `1` | Sync `pug`. |
+| `2` / numpad `2` | Sync `get5`. |
 | `3` / numpad `3` | Sync both repositories in sequence. |
 | `ESC` | Exit immediately without syncing. |
 | Input unavailable | If key input cannot be read, the updater falls back to syncing both repositories. |
 
-### Sync Sources and Network Strategy
-
-| Data | First source | Second source |
-| --- | --- | --- |
-| `pug` repo metadata | `https://gitee.com/api/v5/repos/SaUrrr/pug` | `https://api.github.com/repos/Qwepplz/pug` |
-| `get5` repo metadata | `https://gitee.com/api/v5/repos/SaUrrr/get5` | `https://api.github.com/repos/Qwepplz/get5` |
-| Repository tree | Gitee Git Tree API | GitHub Git Tree API |
-| Raw file download | `https://gitee.com/<owner>/<repo>/raw/<branch>/<path>` | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` |
-
-- The updater first queries the default branch of the selected repository.
-- If default-branch lookup fails, it still tries common branch names such as `main` and `master`.
-- Repository trees must be complete. If a remote API returns a truncated tree, sync is aborted because deletion would no longer be safe.
-- The sync logic does not use `gh.sevencdn.com` as an API or raw-content source.
-- Network requests use TLS 1.2 and a fixed timeout.
-
-### Sync Flow
-
-| Stage | Console label | Description |
-| --- | --- | --- |
-| 1 | `[1/4] Reading repository tree...` | Reads the branch and the full remote file tree. |
-| 2 | `[2/4] Removing repo README/LICENSE when safe...` | Handles root README/LICENSE files specially so local docs are not blindly overwritten. |
-| 3 | `[3/4] Downloading and updating files...` | Adds missing files, updates changed files, and skips unchanged files through cache and hash checks. |
-| 4 | `[4/4] Removing files deleted upstream...` | Deletes only files that were previously tracked by this updater and are now gone upstream. |
-
-### File Rules
-
-| File type | Behavior |
-| --- | --- |
-| Normal tracked file | Added if missing, updated if changed, skipped if unchanged. |
-| Root `README*`, `LICENSE*`, `LICENCE*`, `LECENSE*` | Not treated as normal sync files; an old synced copy may be removed only when it exactly matches upstream and is safe to touch. |
-| `addons/sourcemod/scripting/include/logdebug.inc` | Always skipped because it is a compile-only conflict file. |
-| `addons/sourcemod/scripting/include/restorecvars.inc` | Always skipped because it is a compile-only conflict file. |
-| File deleted upstream | Removed only if it appears in the updater's previously tracked manifest/state. |
-| Updater executable and helper files | Protected from overwrite and deletion. |
-| Existing log files | Protected from sync operations. |
-
-### Safety Guarantees
+### Stable Behavior
 
 | Area | Behavior |
 | --- | --- |
-| Target boundary | Refuses to touch paths outside the selected target folder. |
-| Reparse points | Refuses to touch paths that pass through a reparse point. |
-| Directory conflicts | Stops if a target file path is actually an existing directory. |
-| Concurrent runs | Uses a named mutex per target folder to prevent simultaneous syncs into the same location. |
-| File verification | Verifies each downloaded file against the Git blob SHA-1 from the remote tree. |
-| Replacement mode | Uses staging files plus `File.Replace` / `File.Move` for atomic-style replacement. |
-| Cleanup | Removes stale `.__pug_get5_sync_staging__*` and `.__pug_get5_sync_backup__*` files on startup when safe. |
-| System behavior | Does not run shell commands, modify registry startup entries, or create scheduled tasks. |
+| Transport | Reads repository metadata and files directly over HTTPS. |
+| Mirror semantics | GitHub and Gitee are treated as mirrors of the same content, not as different upstreams. |
+| Root documents | Root `README*` and `LICENSE*` style files are not handled like ordinary synced files. |
+| File deletion | Deletes only files that were previously tracked by this updater and are now gone upstream. |
+| Protected targets | Protects the running updater, known local helper files, and existing log files from overwrite or deletion. |
+| State isolation | Keeps separate state for each target folder and for each repository. |
+| Logging | Writes daily log files into `log\` beside `UpdateServer.exe` when logging is available. |
 
-Protected local targets include:
-
-| Type | Description |
-| --- | --- |
-| Running executable | The updater protects the actual executable path it is currently running from. |
-| Existing local helper files | The updater also protects known local helper files if they already exist in the target folder. |
-| Existing log files | Files already inside the target folder's `log` directory are protected. |
-
-### Cache, State, and Logs
-
+### Build
 | Item | Description |
 | --- | --- |
-| State root priority | `PUG_GET5_SYNC_STATE` → `%LOCALAPPDATA%\PugGet5Sync` → `%APPDATA%\PugGet5Sync` → `%TEMP%\PugGet5Sync` |
-| Target isolation | The updater hashes the target folder path with SHA-256 and stores state under that hash. |
-| Repository isolation | `pug` and `get5` each use their own nested state directory. |
-| Legacy manifest | `tracked-files.txt` |
-| Current state file | `sync-state.json` |
-| Cached metadata | Remote SHA, local file length, and last-write timestamp |
-| Log directory | `log` beside `UpdateServer.exe` |
-| Log naming | One file per day, such as `log\UpdateServer-2026-04-14.log` |
+| Default command | `tools\Build-UpdateServer.bat` |
+| No-pause command | `tools\Build-UpdateServer.bat --no-pause` |
+| Compiler model | The build script uses the Windows .NET Framework `csc.exe` toolchain when available. |
+| Default output | `dist\UpdateServer.exe` |
 
 ### Repository Layout
 
@@ -121,10 +69,11 @@ Only files that currently exist in this repository are listed below.
 
 | Path | Description |
 | --- | --- |
-| `README.md` | Project documentation. |
+| `README.md` | Stable user-facing project guide. |
+| `docs\maintenance.md` | Implementation-level notes that may change more often than the README. |
 | `LICENSE` | License file. |
-| `src\UpdateServer\Program.cs` | Single-file C# implementation containing the menu, sync logic, network access, safety checks, progress display, cache handling, and logging. |
-| `tools\Build-UpdateServer.bat` | Windows build script for `dist\UpdateServer.exe`, with optional code signing. |
+| `src\UpdateServer\Program.cs` | Single-file C# implementation containing menu, sync, network, safety, cache, and logging logic. |
+| `tools\Build-UpdateServer.bat` | Windows build script for `dist\UpdateServer.exe`. |
 
 ### Runtime-generated Paths
 
@@ -133,83 +82,25 @@ These paths are created locally during build or sync and are not tracked as repo
 | Path | Description |
 | --- | --- |
 | `dist\UpdateServer.exe` | Default local build output produced by `tools\Build-UpdateServer.bat`. |
-| `log\` | Runtime log directory created beside `UpdateServer.exe` when logging is available. |
-| `<state-root>\<target-hash>\pug\` | Per-target cache/state directory for `pug`. |
-| `<state-root>\<target-hash>\get5\` | Per-target cache/state directory for `get5`. |
+| `log\` | Runtime log directory created beside `UpdateServer.exe`. |
+| `<state-root>\<target-hash>\pug\` | Per-target cache and state directory for `pug`. |
+| `<state-root>\<target-hash>\get5\` | Per-target cache and state directory for `get5`. |
 
-### Build
+### Maintenance Notes
 
-Build on Windows with:
-
-```bat
-tools\Build-UpdateServer.bat
-```
-
-Skip the final pause with:
-
-```bat
-tools\Build-UpdateServer.bat --no-pause
-```
-
-The script first looks for:
-
-```text
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
-```
-
-If that compiler is not available, it falls back to:
-
-```text
-C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe
-```
-
-Build references:
-
-| Reference | Purpose |
+| Document | Purpose |
 | --- | --- |
-| `System.Web.Extensions.dll` | `JavaScriptSerializer` JSON parsing |
-| `System.Core.dll` | LINQ and related base functionality |
+| `docs\maintenance.md` | Holds implementation details that may change more often, including the current source order, sync stages, cache/state details, and special-case file rules. |
 
-Default output:
+This README intentionally stays focused on stable usage and repository facts so that routine maintenance work does not require frequent README edits.
 
-```text
-dist\UpdateServer.exe
-```
-
-### Optional Code Signing
-
-If you have a real `.pfx` code-signing certificate, the build script can sign the generated EXE automatically:
-
-```bat
-tools\Build-UpdateServer.bat "C:\path\code-signing.pfx" "password"
-```
-
-Or together with `--no-pause`:
-
-```bat
-tools\Build-UpdateServer.bat --no-pause "C:\path\code-signing.pfx" "password"
-```
-
-The script searches `PATH` and common Windows SDK locations for `signtool.exe`.
-
-### Verify a Build Artifact
-
-```bat
-certutil -hashfile dist\UpdateServer.exe SHA256
-```
-
-Use the resulting SHA-256 digest for release verification or pre-distribution checks.
-
-### Troubleshooting
+### Basic Troubleshooting
 
 | Symptom | Suggestion |
 | --- | --- |
 | `C# compiler was not found.` | Install or enable a .NET Framework 4.x compiler on Windows. |
-| `Another Pug/Get5 sync is already running for this folder.` | Close the other updater instance for the same target folder and retry. |
-| `Repository API returned a truncated tree.` | Retry later or from another network; sync stops intentionally to protect deletion safety. |
-| `Refusing to touch a path outside the target folder` | Check target-folder selection, path mappings, or unexpected remote paths. |
-| `Refusing to touch a reparse point path` | Remove or replace junctions / symlinks / reparse points in the target path and retry. |
-| Output is not enough to diagnose a failure | Open the current day's file in `log\`. |
+| Sync failed | Open the current day's file in `log\`. |
+| Another sync is already running | Close the other updater instance for the same target folder and retry. |
 
 ## 中文说明
 
@@ -220,10 +111,9 @@ Use the resulting SHA-256 digest for release verification or pre-distribution ch
 | 程序目标 | 将 `pug`、`get5` 或两者同步到 `UpdateServer.exe` 所在目录。 |
 | 目标平台 | Windows。 |
 | 目标机器依赖 | 不需要安装 Git。 |
-| 当前上游仓库 | `Qwepplz/pug` 与 `Qwepplz/get5`。 |
-| 默认访问顺序 | 先访问 Gitee 同步镜像，再访问 GitHub 对应仓库。 |
-| 顺序含义 | 两组地址被视为内容应保持一致的同步入口；先后顺序只用于访问便利，不表示主备或内容优先级。 |
-
+| 上游内容 | `Qwepplz/pug` 与 `Qwepplz/get5`。 |
+| 源策略 | 程序可从 GitHub 与 Gitee 镜像入口读取数据，两者被视为同一内容的镜像源。具体访问顺序属于实现细节，放在 `docs/maintenance.md` 中维护，而不是写死在 README。 |
+| 安全模型 | 下载文件会校验，写入范围被限制在目标目录内，并且只会删除此前由本程序跟踪过的文件。 |
 ### 快速开始
 
 | 步骤 | 操作 |
@@ -239,81 +129,32 @@ Use the resulting SHA-256 digest for release verification or pre-distribution ch
 
 | 按键 | 行为 |
 | --- | --- |
-| `1` / 小键盘 `1` | 同步 `Qwepplz/pug`。 |
-| `2` / 小键盘 `2` | 同步 `Qwepplz/get5`。 |
+| `1` / 小键盘 `1` | 同步 `pug`。 |
+| `2` / 小键盘 `2` | 同步 `get5`。 |
 | `3` / 小键盘 `3` | 依次同步两个仓库。 |
 | `ESC` | 立即退出，不执行同步。 |
 | 无法读取输入 | 如果按键读取失败，程序会回退为同步全部仓库。 |
 
-### 同步源与网络策略
-
-| 数据 | 第一访问入口 | 第二访问入口 |
-| --- | --- | --- |
-| `pug` 仓库信息 | `https://gitee.com/api/v5/repos/SaUrrr/pug` | `https://api.github.com/repos/Qwepplz/pug` |
-| `get5` 仓库信息 | `https://gitee.com/api/v5/repos/SaUrrr/get5` | `https://api.github.com/repos/Qwepplz/get5` |
-| 仓库树 | Gitee Git Tree API | GitHub Git Tree API |
-| 原始文件下载 | `https://gitee.com/<owner>/<repo>/raw/<branch>/<path>` | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` |
-
-- 程序会先查询所选仓库的默认分支。
-- 如果默认分支查询失败，还会继续尝试常见分支名 `main` 与 `master`。
-- 仓库树必须完整返回；如果远端 API 返回的是截断树，程序会终止同步，因为那样删除逻辑将不再安全。
-- 同步逻辑不会把 `gh.sevencdn.com` 当作 API 或 Raw 文件来源。
-- 网络请求使用 TLS 1.2，并带固定超时。
-
-### 同步流程
-
-| 阶段 | 控制台标识 | 说明 |
-| --- | --- | --- |
-| 1 | `[1/4] Reading repository tree...` | 读取目标分支与完整远端文件树。 |
-| 2 | `[2/4] Removing repo README/LICENSE when safe...` | 特殊处理根目录 README/LICENSE 文件，避免粗暴覆盖本地说明文档。 |
-| 3 | `[3/4] Downloading and updating files...` | 新增缺失文件、更新已变化文件，并通过缓存与哈希校验跳过未变化文件。 |
-| 4 | `[4/4] Removing files deleted upstream...` | 只删除此前由本更新器跟踪、且当前已从上游移除的文件。 |
-
-### 文件处理规则
-
-| 文件类型 | 处理方式 |
-| --- | --- |
-| 普通跟踪文件 | 不存在则新增，内容变化则更新，未变化则跳过。 |
-| 根目录 `README*`、`LICENSE*`、`LICENCE*`、`LECENSE*` | 不按普通同步文件处理；只有在本地副本与上游完全一致且安全可触碰时，旧同步副本才可能被移除。 |
-| `addons/sourcemod/scripting/include/logdebug.inc` | 始终跳过，因为它是编译期冲突文件。 |
-| `addons/sourcemod/scripting/include/restorecvars.inc` | 始终跳过，因为它是编译期冲突文件。 |
-| 上游已删除文件 | 仅当该文件出现在此前的清单/状态记录里时才会删除。 |
-| 更新器自身与辅助文件 | 受保护，不会被覆盖或删除。 |
-| 现有日志文件 | 受保护，不参与同步操作。 |
-
-### 安全保证
+### 稳定行为说明
 
 | 领域 | 行为 |
 | --- | --- |
-| 目标目录边界 | 拒绝触碰目标目录之外的路径。 |
-| 重解析点 | 拒绝触碰经过 reparse point 的路径。 |
-| 目录冲突 | 如果目标文件路径实际是一个已有目录，程序会停止。 |
-| 并发运行 | 针对每个目标目录使用命名互斥锁，避免同时写入同一位置。 |
-| 文件校验 | 每个下载文件都会用远端仓库树提供的 Git blob SHA-1 做校验。 |
-| 替换方式 | 使用 staging 临时文件加 `File.Replace` / `File.Move` 进行原子式替换。 |
-| 启动清理 | 启动时会在安全前提下清理残留的 `.__pug_get5_sync_staging__*` 与 `.__pug_get5_sync_backup__*` 文件。 |
-| 系统行为 | 不会执行 shell 命令、不会修改注册表启动项、不会创建计划任务。 |
+| 传输方式 | 直接通过 HTTPS 读取仓库元数据与文件内容。 |
+| 镜像语义 | GitHub 与 Gitee 被视为同一内容的镜像入口，而不是不同上游。 |
+| 根目录文档 | 根目录 `README*`、`LICENSE*` 一类文件不会按普通同步文件粗暴处理。 |
+| 删除范围 | 只删除此前由本更新器记录过、且当前已从上游消失的文件。 |
+| 受保护目标 | 会保护当前运行的更新器、已知本地辅助文件以及已有日志文件，不允许覆盖或删除。 |
+| 状态隔离 | 会按目标目录与仓库分别保存独立状态。 |
+| 日志 | 在 `UpdateServer.exe` 同级的 `log\` 目录按天写入日志。 |
 
-受保护的本地目标包括：
-
-| 类型 | 说明 |
-| --- | --- |
-| 当前运行的可执行文件 | 程序会保护自己当前实际运行的 EXE 路径。 |
-| 已存在的本地辅助文件 | 如果目标目录里已经存在已知辅助文件，程序也会保护它们。 |
-| 已存在的日志文件 | 目标目录 `log` 目录内已有的日志文件会被保护。 |
-
-### 缓存、状态与日志
+### 构建
 
 | 项目 | 说明 |
 | --- | --- |
-| 状态根目录优先级 | `PUG_GET5_SYNC_STATE` → `%LOCALAPPDATA%\PugGet5Sync` → `%APPDATA%\PugGet5Sync` → `%TEMP%\PugGet5Sync` |
-| 目标目录隔离 | 程序会对目标目录路径做 SHA-256 哈希，并将状态存放到对应子目录。 |
-| 仓库隔离 | `pug` 与 `get5` 各自使用独立的嵌套状态目录。 |
-| 旧清单文件 | `tracked-files.txt` |
-| 当前状态文件 | `sync-state.json` |
-| 缓存内容 | 远端 SHA、本地长度、本地最后写入时间 |
-| 日志目录 | `UpdateServer.exe` 同级的 `log` 目录 |
-| 日志命名 | 按天生成一个文件，例如 `log\UpdateServer-2026-04-14.log` |
+| 默认命令 | `tools\Build-UpdateServer.bat` |
+| 跳过暂停 | `tools\Build-UpdateServer.bat --no-pause` |
+| 编译方式 | 构建脚本在可用时使用 Windows .NET Framework 的 `csc.exe` 工具链。 |
+| 默认输出 | `dist\UpdateServer.exe` |
 
 ### 仓库结构
 
@@ -321,92 +162,34 @@ Use the resulting SHA-256 digest for release verification or pre-distribution ch
 
 | 路径 | 说明 |
 | --- | --- |
-| `README.md` | 项目说明文档。 |
+| `README.md` | 面向使用者的长期稳定说明文档。 |
+| `docs\maintenance.md` | 面向维护者的实现细节说明，允许随实现演进而调整。 |
 | `LICENSE` | 许可证文件。 |
-| `src\UpdateServer\Program.cs` | 单文件 C# 主实现，包含菜单、同步、网络访问、安全校验、进度显示、缓存处理和日志逻辑。 |
-| `tools\Build-UpdateServer.bat` | Windows 构建脚本，用于生成 `dist\UpdateServer.exe`，并支持可选代码签名。 |
+| `src\UpdateServer\Program.cs` | 单文件 C# 主实现，包含菜单、同步、网络、安全、缓存与日志逻辑。 |
+| `tools\Build-UpdateServer.bat` | 用于生成 `dist\UpdateServer.exe` 的 Windows 构建脚本。 |
 
 ### 运行时生成路径
-
-以下路径是在本地构建或同步时生成的，不属于仓库已提交文件。
+以下路径会在本地构建或同步时生成，不属于仓库已提交文件。
 
 | 路径 | 说明 |
 | --- | --- |
-| `dist\UpdateServer.exe` | `tools\Build-UpdateServer.bat` 生成的默认本地构建产物。 |
+| `dist\UpdateServer.exe` | `tools\Build-UpdateServer.bat` 生成的默认本地产物。 |
 | `log\` | 运行时在 `UpdateServer.exe` 同级创建的日志目录。 |
 | `<状态根目录>\<目标目录哈希>\pug\` | `pug` 的按目标目录隔离缓存/状态目录。 |
 | `<状态根目录>\<目标目录哈希>\get5\` | `get5` 的按目标目录隔离缓存/状态目录。 |
 
-### 构建
+### 维护说明入口
 
-在 Windows 上构建：
-
-```bat
-tools\Build-UpdateServer.bat
-```
-
-如需跳过最后的暂停：
-
-```bat
-tools\Build-UpdateServer.bat --no-pause
-```
-
-脚本会优先查找：
-
-```text
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
-```
-
-若不存在，则回退到：
-
-```text
-C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe
-```
-
-构建引用：
-
-| 引用 | 用途 |
+| 文档 | 用途 |
 | --- | --- |
-| `System.Web.Extensions.dll` | 使用 `JavaScriptSerializer` 解析 JSON |
-| `System.Core.dll` | LINQ 等基础能力 |
+| `docs\maintenance.md` | 存放更容易变化的实现细节，例如当前源顺序、同步阶段、缓存/状态细节，以及特殊文件处理规则。 |
 
-默认输出：
+本 README 刻意只保留稳定的使用说明与仓库事实，避免以后每次维护实现细节时都必须同步改 README。
 
-```text
-dist\UpdateServer.exe
-```
-
-### 可选代码签名
-
-如果你有真实可用的 `.pfx` 代码签名证书，构建脚本可以在生成 EXE 后自动签名：
-
-```bat
-tools\Build-UpdateServer.bat "C:\path\code-signing.pfx" "password"
-```
-
-也可以与 `--no-pause` 组合使用：
-
-```bat
-tools\Build-UpdateServer.bat --no-pause "C:\path\code-signing.pfx" "password"
-```
-
-脚本会在 `PATH` 与常见 Windows SDK 安装路径中查找 `signtool.exe`。
-
-### 校验构建产物
-
-```bat
-certutil -hashfile dist\UpdateServer.exe SHA256
-```
-
-得到的 SHA-256 摘要可用于发布校验或分发前自检。
-
-### 常见问题
+### 基础排障
 
 | 现象 | 建议 |
 | --- | --- |
 | `C# compiler was not found.` | 在 Windows 上安装或启用 .NET Framework 4.x 编译器。 |
-| `Another Pug/Get5 sync is already running for this folder.` | 关闭同一目标目录下的另一个更新器实例后重试。 |
-| `Repository API returned a truncated tree.` | 稍后重试或切换网络；程序主动停止是为了保护删除安全。 |
-| `Refusing to touch a path outside the target folder` | 检查目标目录选择、路径映射或异常远端路径。 |
-| `Refusing to touch a reparse point path` | 去掉或替换目标路径中的 junction / symlink / reparse point 后再试。 |
-| 控制台信息不足以定位错误 | 打开 `log` 目录中的当日日志文件。 |
+| 同步失败 | 打开 `log\` 目录中的当日日志。 |
+| 已有同步实例运行中 | 关闭同一目标目录下的另一个更新器实例后重试。 |
