@@ -19,7 +19,7 @@
 | Platform | Windows. |
 | Git requirement | None on the target machine. |
 | Upstream content | `Qwepplz/pug` and `Qwepplz/get5`. |
-| Source policy | The updater can read from GitHub and Gitee mirror endpoints. They are treated as equivalent mirrors of the same content. Concrete access order is documented in `docs/maintenance.md`, not in this README. |
+| Source policy | The updater can read from GitHub and Gitee mirror endpoints. They are treated as equivalent mirrors of the same content. Concrete access order is treated as implementation detail and is intentionally not expanded in this README. |
 | Safety model | The updater verifies downloaded files, confines writes to the target folder, and only deletes files that it previously tracked. |
 
 ### Quick Start
@@ -70,7 +70,6 @@ Only files that currently exist in this repository are listed below.
 | Path | Description |
 | --- | --- |
 | `README.md` | Stable user-facing project guide. |
-| `docs\maintenance.md` | Implementation-level notes that may change more often than the README. |
 | `LICENSE` | License file. |
 | `src\UpdateServer\Program.cs` | Single-file C# implementation containing menu, sync, network, safety, cache, and logging logic. |
 | `tools\Build-UpdateServer.bat` | Windows build script for `dist\UpdateServer.exe`. |
@@ -85,12 +84,6 @@ These paths are created locally during build or sync and are not tracked as repo
 | `log\` | Runtime log directory created beside `UpdateServer.exe`. |
 | `<state-root>\<target-hash>\pug\` | Per-target cache and state directory for `pug`. |
 | `<state-root>\<target-hash>\get5\` | Per-target cache and state directory for `get5`. |
-
-### Maintenance Notes
-
-| Document | Purpose |
-| --- | --- |
-| `docs\maintenance.md` | Holds implementation details that may change more often, including the current source order, sync stages, cache/state details, and special-case file rules. |
 
 This README intentionally stays focused on stable usage and repository facts so that routine maintenance work does not require frequent README edits.
 
@@ -112,7 +105,7 @@ This README intentionally stays focused on stable usage and repository facts so 
 | 目标平台 | Windows。 |
 | 目标机器依赖 | 不需要安装 Git。 |
 | 上游内容 | `Qwepplz/pug` 与 `Qwepplz/get5`。 |
-| 源策略 | 程序可从 GitHub 与 Gitee 镜像入口读取数据，两者被视为同一内容的镜像源。具体访问顺序属于实现细节，放在 `docs/maintenance.md` 中维护，而不是写死在 README。 |
+| 源策略 | 程序可从 GitHub 与 Gitee 镜像入口读取数据，两者被视为同一内容的镜像源。具体访问顺序属于实现细节，因此不在 README 中展开。 |
 | 安全模型 | 下载文件会校验，写入范围被限制在目标目录内，并且只会删除此前由本程序跟踪过的文件。 |
 ### 快速开始
 
@@ -163,7 +156,6 @@ This README intentionally stays focused on stable usage and repository facts so 
 | 路径 | 说明 |
 | --- | --- |
 | `README.md` | 面向使用者的长期稳定说明文档。 |
-| `docs\maintenance.md` | 面向维护者的实现细节说明，允许随实现演进而调整。 |
 | `LICENSE` | 许可证文件。 |
 | `src\UpdateServer\Program.cs` | 单文件 C# 主实现，包含菜单、同步、网络、安全、缓存与日志逻辑。 |
 | `tools\Build-UpdateServer.bat` | 用于生成 `dist\UpdateServer.exe` 的 Windows 构建脚本。 |
@@ -177,12 +169,6 @@ This README intentionally stays focused on stable usage and repository facts so 
 | `log\` | 运行时在 `UpdateServer.exe` 同级创建的日志目录。 |
 | `<状态根目录>\<目标目录哈希>\pug\` | `pug` 的按目标目录隔离缓存/状态目录。 |
 | `<状态根目录>\<目标目录哈希>\get5\` | `get5` 的按目标目录隔离缓存/状态目录。 |
-
-### 维护说明入口
-
-| 文档 | 用途 |
-| --- | --- |
-| `docs\maintenance.md` | 存放更容易变化的实现细节，例如当前源顺序、同步阶段、缓存/状态细节，以及特殊文件处理规则。 |
 
 本 README 刻意只保留稳定的使用说明与仓库事实，避免以后每次维护实现细节时都必须同步改 README。
 
