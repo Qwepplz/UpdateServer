@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-set "VERSION=1.0.0"
+set "VERSION=1.0.1"
 set "ROOT_DIR=%~dp0.."
 set "SRC_FILE=%ROOT_DIR%\src\UpdateServer\Program.cs"
 set "OUT_DIR=%ROOT_DIR%\dist"

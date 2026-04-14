@@ -14,9 +14,9 @@ using System.Web.Script.Serialization;
 [assembly: AssemblyCompany("Qwepplz")]
 [assembly: AssemblyProduct("UpdateServer")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Qwepplz")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("v1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("v1.0.1")]
 
 internal static class UpdateServerProgram
 {
